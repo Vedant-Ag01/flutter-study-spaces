@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -80,21 +81,31 @@ class _LoginScreenState extends State<LoginScreen> {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Login Successful!')),
                       );
+                      context.go('/spaces');
                     }
                   } else {
                     // SIGN UP MODE
-                    await supabase.auth.signUp(
+                    // SIGN UP MODE
+                    final AuthResponse res = await supabase.auth.signUp(
                       email: email,
                       password: password,
                     );
+
+                    // Check if Supabase is giving us a "fake" success
+                    if (res.user != null &&
+                        res.user!.identities != null &&
+                        res.user!.identities!.isEmpty) {
+                      // Manually throw an error so our catch block grabs it!
+                      throw const AuthException(
+                        'This email is already registered. Please log in instead.',
+                      );
+                    }
+
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Account Created! Check your email to verify (or check the dashboard).',
-                          ),
-                        ),
+                        const SnackBar(content: Text('Account Created!')),
                       );
+                      context.go('/spaces');
                     }
                   }
                 } on AuthException catch (e) {
