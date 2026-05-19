@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:go_router/go_router.dart';
+import 'dart:math';
 
 class SpacesScreen extends StatefulWidget {
   const SpacesScreen({super.key});
@@ -9,8 +10,103 @@ class SpacesScreen extends StatefulWidget {
   State<SpacesScreen> createState() => _SpacesScreenState();
 }
 
+// code generator
+String _generateInviteCode() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  final rnd = Random();
+  return String.fromCharCodes(
+    Iterable.generate(6, (_) => chars.codeUnitAt(rnd.nextInt(chars.length))),
+  );
+}
+
 class _SpacesScreenState extends State<SpacesScreen> {
   final supabase = Supabase.instance.client;
+
+  // join room feature
+  void _showJoinDialog() {
+    final codeController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Join a Study Space'),
+          content: TextField(
+            controller: codeController,
+            decoration: const InputDecoration(
+              labelText: 'Enter 6-character Code',
+              border: OutlineInputBorder(),
+            ),
+            // Automatically make their keyboard type in UPPERCASE
+            textCapitalization: TextCapitalization.characters,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final code = codeController.text.trim().toUpperCase();
+                if (code.isEmpty) return;
+
+                try {
+                  // 1. Ask the database: "Does a room with this code exist?"
+                  final space = await supabase
+                      .from('spaces')
+                      .select()
+                      .eq('invite_code', code)
+                      .maybeSingle(); // maybeSingle returns null if it doesn't exist!
+
+                  // 2. If it doesn't exist, show an error and stop.
+                  if (space == null) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Invalid invite code!')),
+                      );
+                    }
+                    return;
+                  }
+
+                  // 3. If it exists write the user's name on the ledger
+                  await supabase.from('space_members').insert({
+                    'space_id': space['id'],
+                    'user_id': supabase.auth.currentUser!.id,
+                  });
+
+                  // 4. Close the popup and celebrate
+                  if (mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Successfully joined ${space['name']}!'),
+                      ),
+                    );
+                    context.push(
+                      '/chat/${space['id']}',
+                      extra: space['name'] ?? 'Study Space',
+                    );
+                  }
+                } catch (e) {
+                  // This catches errors (like if they are already in the room)
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Error: Could not join (Are you already a member?)',
+                        ),
+                      ),
+                    );
+                  }
+                }
+              },
+              child: const Text('Join'),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   // This function handles the popup and database logic
   Future<void> _showCreateSpaceDialog() async {
@@ -44,31 +140,38 @@ class _SpacesScreenState extends State<SpacesScreen> {
               onPressed: () async {
                 final name = nameController.text.trim();
                 final desc = descController.text.trim();
+                if (name.isEmpty) return;
 
-                if (name.isEmpty) return; // Don't allow blank names
-                print(
-                  'DEBUG: Current User ID is ${supabase.auth.currentUser?.id}',
-                );
+                // 1. Generate the 6-character code!
+                final inviteCode = _generateInviteCode();
+
                 try {
-                  // 1. Create the room in the 'spaces' table and grab its new ID
                   final newSpace = await supabase
                       .from('spaces')
-                      .insert({'name': name, 'description': desc})
+                      .insert({
+                        'name': name,
+                        'description': desc,
+                        'invite_code':
+                            inviteCode, // 2. Save it to the database!
+                      })
                       .select()
                       .single();
 
-                  // 2. Add yourself to the 'space_members' ledger using that ID
                   await supabase.from('space_members').insert({
                     'space_id': newSpace['id'],
                     'user_id': supabase.auth.currentUser!.id,
                   });
 
-                  if (context.mounted) {
-                    Navigator.pop(context); // Close the popup
+                  if (mounted) {
+                    Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Space created successfully!'),
+                      SnackBar(
+                        content: Text('Space created! Code: $inviteCode'),
                       ),
+                    );
+                    context.push(
+                      '/chat/${newSpace['id']}',
+                      extra: newSpace['name'] ?? 'Study Space',
                     );
                   }
                 } catch (e) {
@@ -91,49 +194,47 @@ class _SpacesScreenState extends State<SpacesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Study Spaces'),
+        title: const Text('Study Spaces'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.group_add),
+            tooltip: 'Join Space',
+            onPressed: _showJoinDialog,
+          ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () async {
               await supabase.auth.signOut();
-              if (context.mounted) context.go('/login');
+              if (mounted) {
+                context.go('/login');
+              }
             },
           ),
         ],
       ),
-      // Replace your old body: const Center(...) with this:
-      body: FutureBuilder<List<Map<String, dynamic>>>(
-        // 1. The Database Query
-        future: supabase
-            .from('spaces')
-            .select('*, space_members!inner(user_id)')
-            .eq('space_members.user_id', supabase.auth.currentUser!.id),
 
-        // 2. The UI Builder
+      body: StreamBuilder<List<Map<String, dynamic>>>(
+        stream: supabase
+            .from('spaces')
+            .stream(primaryKey: ['id'])
+            .order('created_at', ascending: false),
         builder: (context, snapshot) {
-          // State A: Still waiting for the internet
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          // State B: Something went wrong
           if (snapshot.hasError) {
             return Center(child: Text('Error: ${snapshot.error}'));
           }
 
           final spaces = snapshot.data ?? [];
 
-          // State C: Successful query, but no spaces exist
           if (spaces.isEmpty) {
             return const Center(
-              child: Text(
-                'You haven\'t joined any spaces yet! Click + to create one.',
-              ),
+              child: Text('No study spaces yet. Create one!'),
             );
           }
 
-          // State D: We have data! Draw the list.
           return ListView.builder(
             itemCount: spaces.length,
             itemBuilder: (context, index) {
@@ -141,14 +242,27 @@ class _SpacesScreenState extends State<SpacesScreen> {
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: ListTile(
-                  leading: const CircleAvatar(child: Icon(Icons.group)),
                   title: Text(space['name'] ?? 'Unnamed Space'),
-                  subtitle: Text(space['description'] ?? 'No description'),
-                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (space['description'] != null)
+                        Text(space['description']),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Invite Code: ${space['invite_code'] ?? 'None'}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.deepPurple,
+                        ),
+                      ),
+                    ],
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
                   onTap: () {
-                    // Tomorrow, we will route this to the actual chat room!
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Opening ${space['name']}...')),
+                    context.push(
+                      '/chat/${space['id']}',
+                      extra: space['name'] ?? 'Study Space',
                     );
                   },
                 ),

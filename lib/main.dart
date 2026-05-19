@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:study_spaces/screens/login_screen.dart';
 import 'package:study_spaces/screens/spaces_screen.dart';
+import 'package:study_spaces/screens/chat_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,6 +37,18 @@ class MyApp extends StatelessWidget {
         GoRoute(
           path: '/spaces',
           builder: (context, state) => const SpacesScreen(),
+        ),
+        GoRoute(
+          path:
+              '/chat/:id', // The :id tells the router to expect a dynamic variable
+          builder: (context, state) {
+            // We grab the ID from the URL and pass it to the ChatScreen
+            final spaceId = state.pathParameters['id']!;
+            // We can also pass the room name using the "extra" property so the App Bar has a title
+            final spaceName = state.extra as String? ?? 'Study Space';
+
+            return ChatScreen(spaceId: spaceId, spaceName: spaceName);
+          },
         ),
       ],
     );
