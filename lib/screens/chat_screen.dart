@@ -1,95 +1,97 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/decks_provider.dart';
+import '../providers/spaces_provider.dart'; // To grab the master Supabase connection
+import 'package:go_router/go_router.dart';
 
-class ChatScreen extends StatefulWidget {
+class ChatScreen extends ConsumerStatefulWidget {
   final String spaceId;
   final String spaceName;
 
   const ChatScreen({super.key, required this.spaceId, required this.spaceName});
 
   @override
-  State<ChatScreen> createState() => _ChatScreenState();
+  ConsumerState<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
-  final supabase = Supabase.instance.client;
-
-  // deck creater dialog
-  void _showCreateDeckDialog() {
+class _ChatScreenState extends ConsumerState<ChatScreen> {
+  // The popup to create a new flashcard folder/deck
+  Future<void> _showCreateDeckDialog() async {
     final titleController = TextEditingController();
 
-    showDialog(
+    await showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Create New Deck'),
-          content: TextField(
-            controller: titleController,
-            decoration: const InputDecoration(
-              labelText: 'Deck Title (e.g. Physics Ch 1)',
-            ),
-            autofocus: true,
-            textCapitalization: TextCapitalization.words,
+      builder: (context) => AlertDialog(
+        title: const Text('Create a New Deck'),
+        content: TextField(
+          controller: titleController,
+          decoration: const InputDecoration(
+            labelText: 'Deck Title (e.g., Biology 101)',
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final title = titleController.text.trim();
-                if (title.isEmpty) return;
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final title = titleController.text.trim();
+              if (title.isEmpty) return;
 
-                try {
-                  // Write the new deck to the database
-                  await supabase.from('decks').insert({
-                    'space_id': widget.spaceId,
-                    'title': title,
-                  });
-                  if (mounted) Navigator.pop(context);
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Error creating deck')),
-                    );
-                  }
+              try {
+                final supabase = ref.read(supabaseProvider);
+
+                // Insert the new deck into the database, linking it to THIS room
+                await supabase.from('decks').insert({
+                  'space_id': widget.spaceId,
+                  'title': title,
+                });
+
+                if (mounted) {
+                  Navigator.pop(context);
                 }
-              },
-              child: const Text('Create'),
-            ),
-          ],
-        );
-      },
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('Error: $e')));
+                }
+              }
+            },
+            child: const Text('Create'),
+          ),
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    //passing the spaceid to the stream provider
+    final decksAsyncValue = ref.watch(decksStreamProvider(widget.spaceId));
+
     return Scaffold(
-      appBar: AppBar(title: Text('${widget.spaceName} - Decks')),
-      // 1. live updates
-      body: StreamBuilder<List<Map<String, dynamic>>>(
-        stream: supabase
-            .from('decks')
-            .stream(primaryKey: ['id'])
-            .eq('space_id', widget.spaceId)
-            .order('created_at', ascending: false),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      appBar: AppBar(
+        title: Text(widget.spaceName), // Displays the name of the room
+      ),
 
-          final decks = snapshot.data ?? [];
+      body: decksAsyncValue.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
 
+        error: (error, stack) => Center(child: Text('Error: $error')),
+
+        data: (decks) {
           // The Empty State
           if (decks.isEmpty) {
             return const Center(
-              child: Text('No decks yet. Create your first flashcard deck!'),
+              child: Text('No flashcard decks yet. Click + to create one!'),
             );
           }
 
-          // The List of Decks
+          // The Data State
           return ListView.builder(
             itemCount: decks.length,
             itemBuilder: (context, index) {
@@ -98,16 +100,15 @@ class _ChatScreenState extends State<ChatScreen> {
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: ListTile(
                   leading: const Icon(Icons.style, color: Colors.deepPurple),
-                  title: Text(deck['title']),
+                  title: Text(
+                    deck['title'],
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {
-                    // flashcard ui should go here
+                    context.push('/deck/${deck['id']}', extra: deck['title']);
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Opening ${deck['title']}... (Coming soon)',
-                        ),
-                      ),
+                      const SnackBar(content: Text('Opening deck soon...')),
                     );
                   },
                 ),
@@ -116,11 +117,10 @@ class _ChatScreenState extends State<ChatScreen> {
           );
         },
       ),
-      // 2. THE NEW BUTTON
-      floatingActionButton: FloatingActionButton.extended(
+
+      floatingActionButton: FloatingActionButton(
         onPressed: _showCreateDeckDialog,
-        icon: const Icon(Icons.add),
-        label: const Text('New Deck'),
+        child: const Icon(Icons.add),
       ),
     );
   }
