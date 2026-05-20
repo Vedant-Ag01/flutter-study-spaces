@@ -5,6 +5,9 @@ import 'package:go_router/go_router.dart';
 import 'package:study_spaces/screens/login_screen.dart';
 import 'package:study_spaces/screens/spaces_screen.dart';
 import 'package:study_spaces/screens/chat_screen.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'screens/profile_screen.dart';
+import 'package:study_spaces/screens/deck_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,7 +19,7 @@ Future<void> main() async {
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im91eXhyanBvbmh0bWpyZG5tb2pyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4NDU0NDMsImV4cCI6MjA5NDQyMTQ0M30.EshSlqq2h1H134-HAf1qVrTtZb8c9e5_zkstr5cTMRE',
   );
 
-  runApp(const MyApp());
+  runApp(const ProviderScope(child: const MyApp()));
 }
 
 class MyApp extends StatelessWidget {
@@ -38,15 +41,24 @@ class MyApp extends StatelessWidget {
           path: '/spaces',
           builder: (context, state) => const SpacesScreen(),
         ),
+        // Add this right inside your routes: [] list
         GoRoute(
-          path:
-              '/chat/:id', // The :id tells the router to expect a dynamic variable
+          path: '/profile',
+          builder: (context, state) => const ProfileScreen(),
+        ),
+        GoRoute(
+          path: '/deck/:deckId',
           builder: (context, state) {
-            // We grab the ID from the URL and pass it to the ChatScreen
+            final deckId = state.pathParameters['deckId']!;
+            final deckTitle = state.extra as String? ?? 'Deck';
+            return DeckScreen(deckId: deckId, deckTitle: deckTitle);
+          },
+        ),
+        GoRoute(
+          path: '/chat/:id',
+          builder: (context, state) {
             final spaceId = state.pathParameters['id']!;
-            // We can also pass the room name using the "extra" property so the App Bar has a title
             final spaceName = state.extra as String? ?? 'Study Space';
-
             return ChatScreen(spaceId: spaceId, spaceName: spaceName);
           },
         ),
