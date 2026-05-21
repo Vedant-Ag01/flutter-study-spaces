@@ -8,6 +8,9 @@ import 'package:study_spaces/screens/chat_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'screens/profile_screen.dart';
 import 'package:study_spaces/screens/deck_screen.dart';
+import 'screens/study_screen.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_quill/flutter_quill.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -62,9 +65,26 @@ class MyApp extends StatelessWidget {
             return ChatScreen(spaceId: spaceId, spaceName: spaceName);
           },
         ),
+        GoRoute(
+          path: '/study/:deckId',
+          builder: (context, state) {
+            final deckId = state.pathParameters['deckId']!;
+            final deckTitle = state.extra as String? ?? 'Study Mode';
+            return StudyScreen(deckId: deckId, deckTitle: deckTitle);
+          },
+        ),
       ],
     );
 
-    return MaterialApp.router(title: 'Study Spaces', routerConfig: router);
+    return MaterialApp.router(
+      title: 'Study Engine',
+      routerConfig: router,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        FlutterQuillLocalizations.delegate,
+      ],
+    );
   }
 }
