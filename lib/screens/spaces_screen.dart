@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'dart:math';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/spaces_provider.dart';
+import 'package:study_spaces/screens/notes_screen.dart';
 
-class SpacesScreen extends StatefulWidget {
+class SpacesScreen extends ConsumerStatefulWidget {
   const SpacesScreen({super.key});
 
   @override
-  State<SpacesScreen> createState() => _SpacesScreenState();
+  ConsumerState<SpacesScreen> createState() => _SpacesScreenState();
 }
 
 // code generator
@@ -19,7 +22,7 @@ String _generateInviteCode() {
   );
 }
 
-class _SpacesScreenState extends State<SpacesScreen> {
+class _SpacesScreenState extends ConsumerState<SpacesScreen> {
   final supabase = Supabase.instance.client;
 
   // join room feature
@@ -112,6 +115,7 @@ class _SpacesScreenState extends State<SpacesScreen> {
   Future<void> _showCreateSpaceDialog() async {
     final nameController = TextEditingController();
     final descController = TextEditingController();
+    String visibility = 'private'; // Default to private!
 
     await showDialog(
       context: context,
@@ -129,6 +133,21 @@ class _SpacesScreenState extends State<SpacesScreen> {
                 controller: descController,
                 decoration: const InputDecoration(labelText: 'Description'),
               ),
+              const SizedBox(height: 16),
+              // THE NEW VISIBILITY DROPDOWN
+              DropdownButtonFormField<String>(
+                value: visibility,
+                decoration: const InputDecoration(labelText: 'Visibility'),
+                items: const [
+                  DropdownMenuItem(value: 'public', child: Text('Public')),
+                  DropdownMenuItem(value: 'private', child: Text('Private')),
+                ],
+                onChanged: (String? newValue) {
+                  if (newValue != null) {
+                    visibility = newValue;
+                  }
+                },
+              ),
             ],
           ),
           actions: [
@@ -142,7 +161,6 @@ class _SpacesScreenState extends State<SpacesScreen> {
                 final desc = descController.text.trim();
                 if (name.isEmpty) return;
 
-                // 1. Generate the 6-character code!
                 final inviteCode = _generateInviteCode();
 
                 try {
@@ -151,8 +169,8 @@ class _SpacesScreenState extends State<SpacesScreen> {
                       .insert({
                         'name': name,
                         'description': desc,
-                        'invite_code':
-                            inviteCode, // 2. Save it to the database!
+                        'invite_code': inviteCode,
+                        'visibility': visibility, // SAVE VISIBILITY TO DB
                       })
                       .select()
                       .single();
@@ -197,6 +215,26 @@ class _SpacesScreenState extends State<SpacesScreen> {
         title: const Text('Study Spaces'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.edit_document),
+            tooltip: 'Test Notes Screen',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) =>
+                      const NotesScreen(spaceId: 'test_id_123'),
+                ),
+              );
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.account_circle),
+            tooltip: 'My Profile',
+            onPressed: () {
+              context.push('/profile'); // This triggers the route we just made!
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.group_add),
             tooltip: 'Join Space',
             onPressed: _showJoinDialog,
@@ -213,64 +251,64 @@ class _SpacesScreenState extends State<SpacesScreen> {
         ],
       ),
 
-      body: StreamBuilder<List<Map<String, dynamic>>>(
-        stream: supabase
-            .from('spaces')
-            .stream(primaryKey: ['id'])
-            .order('created_at', ascending: false),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body: ref
+          .watch(spacesStreamProvider)
+          .when(
+            // 1. The Loading State
+            loading: () => const Center(child: CircularProgressIndicator()),
 
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
+            // 2. The Error State
+            error: (error, stackTrace) =>
+                Center(child: Text('Error loading spaces: $error')),
 
-          final spaces = snapshot.data ?? [];
+            // 3. The Data / Empty State
+            data: (spaces) {
+              if (spaces.isEmpty) {
+                return const Center(
+                  child: Text('No study spaces yet. Create one!'),
+                );
+              }
 
-          if (spaces.isEmpty) {
-            return const Center(
-              child: Text('No study spaces yet. Create one!'),
-            );
-          }
-
-          return ListView.builder(
-            itemCount: spaces.length,
-            itemBuilder: (context, index) {
-              final space = spaces[index];
-              return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: ListTile(
-                  title: Text(space['name'] ?? 'Unnamed Space'),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (space['description'] != null)
-                        Text(space['description']),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Invite Code: ${space['invite_code'] ?? 'None'}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.deepPurple,
-                        ),
+              return ListView.builder(
+                itemCount: spaces.length,
+                itemBuilder: (context, index) {
+                  final space = spaces[index];
+                  return Card(
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    child: ListTile(
+                      title: Text(space['name'] ?? 'Unnamed Space'),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (space['description'] != null)
+                            Text(space['description']),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Invite Code: ${space['invite_code'] ?? 'None'}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.deepPurple,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () {
-                    context.push(
-                      '/chat/${space['id']}',
-                      extra: space['name'] ?? 'Study Space',
-                    );
-                  },
-                ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () {
+                        context.push(
+                          '/chat/${space['id']}',
+                          extra: space['name'] ?? 'Study Space',
+                        );
+                      },
+                    ),
+                  );
+                },
               );
             },
-          );
-        },
-      ),
+          ),
+
       floatingActionButton: FloatingActionButton(
         onPressed: _showCreateSpaceDialog,
         child: const Icon(Icons.add),
