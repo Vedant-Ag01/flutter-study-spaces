@@ -304,6 +304,12 @@ class _SpacesScreenState extends ConsumerState<SpacesScreen> {
                           const Icon(Icons.chevron_right),
                         ],
                       ),
+                      onTap: () {
+                        context.push(
+                          '/chat/${space['id']}',
+                          extra: space['name'] ?? 'Study Space',
+                        );
+                      },
                     ),
                   );
                 },

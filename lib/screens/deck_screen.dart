@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/flashcards_provider.dart';
 import '../providers/spaces_provider.dart';
+import 'package:go_router/go_router.dart';
 
 class DeckScreen extends ConsumerStatefulWidget {
   final String deckId;
@@ -89,9 +90,7 @@ class _DeckScreenState extends ConsumerState<DeckScreen> {
             icon: const Icon(Icons.play_circle_fill, size: 28),
             tooltip: 'Study Deck',
             onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Study mode coming next!')),
-              );
+              context.push('/study/${widget.deckId}', extra: widget.deckTitle);
             },
           ),
         ],
