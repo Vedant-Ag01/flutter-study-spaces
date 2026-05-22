@@ -215,19 +215,6 @@ class _SpacesScreenState extends ConsumerState<SpacesScreen> {
         title: const Text('Study Spaces'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.edit_document),
-            tooltip: 'Test Notes Screen',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) =>
-                      const NotesScreen(spaceId: 'test_id_123'),
-                ),
-              );
-            },
-          ),
-          IconButton(
             icon: const Icon(Icons.account_circle),
             tooltip: 'My Profile',
             onPressed: () {
@@ -295,13 +282,28 @@ class _SpacesScreenState extends ConsumerState<SpacesScreen> {
                           ),
                         ],
                       ),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () {
-                        context.push(
-                          '/chat/${space['id']}',
-                          extra: space['name'] ?? 'Study Space',
-                        );
-                      },
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(
+                              Icons.edit_document,
+                              color: Colors.deepPurple,
+                            ),
+                            tooltip: 'Space Notes',
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      NotesScreen(spaceId: space['id']),
+                                ),
+                              );
+                            },
+                          ),
+                          const Icon(Icons.chevron_right),
+                        ],
+                      ),
                     ),
                   );
                 },
