@@ -7,8 +7,14 @@ import 'package:go_router/go_router.dart';
 class DeckScreen extends ConsumerStatefulWidget {
   final String deckId;
   final String deckTitle;
+  final String spaceId;
 
-  const DeckScreen({super.key, required this.deckId, required this.deckTitle});
+  const DeckScreen({
+    super.key,
+    required this.deckId,
+    required this.deckTitle,
+    required this.spaceId,
+  });
 
   @override
   ConsumerState<DeckScreen> createState() => _DeckScreenState();
@@ -90,7 +96,10 @@ class _DeckScreenState extends ConsumerState<DeckScreen> {
             icon: const Icon(Icons.play_circle_fill, size: 28),
             tooltip: 'Study Deck',
             onPressed: () {
-              context.push('/study/${widget.deckId}', extra: widget.deckTitle);
+              context.push(
+                '/study/${widget.deckId}',
+                extra: {'title': widget.deckTitle, 'spaceId': widget.spaceId},
+              );
             },
           ),
         ],

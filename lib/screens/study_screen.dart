@@ -2,12 +2,20 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/flashcards_provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:study_spaces/providers/comments_provider.dart';
 
 class StudyScreen extends ConsumerStatefulWidget {
   final String deckId;
   final String deckTitle;
+  final String spaceId;
 
-  const StudyScreen({super.key, required this.deckId, required this.deckTitle});
+  const StudyScreen({
+    super.key,
+    required this.deckId,
+    required this.deckTitle,
+    required this.spaceId,
+  });
 
   @override
   ConsumerState<StudyScreen> createState() => _StudyScreenState();
@@ -27,6 +35,25 @@ class _StudyScreenState extends ConsumerState<StudyScreen> {
         title: Text('Studying: ${widget.deckTitle}'),
         backgroundColor: Colors.deepPurple,
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.forum),
+            tooltip: 'Open Discussion',
+            onPressed: () {
+              // THIS OPENS THE BOTTOM SHEET
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled:
+                    true, // Allows the sheet to move with the keyboard
+                builder: (context) => ChatBottomSheet(
+                  itemId: widget.deckId,
+                  spaceId: widget
+                      .spaceId, // We'll need to pass the spaceId from the previous screen
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: cardsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -187,6 +214,127 @@ class _FlipCardState extends State<FlipCard>
             color: textColor,
           ),
         ),
+      ),
+    );
+  }
+}
+
+//Chat UI
+class ChatBottomSheet extends ConsumerStatefulWidget {
+  final String itemId;
+  final String spaceId; // Needed so we know which room this is in
+
+  const ChatBottomSheet({
+    super.key,
+    required this.itemId,
+    required this.spaceId,
+  });
+
+  @override
+  ConsumerState<ChatBottomSheet> createState() => _ChatBottomSheetState();
+}
+
+class _ChatBottomSheetState extends ConsumerState<ChatBottomSheet> {
+  final _messageController = TextEditingController();
+  //message sending
+  Future<void> _sendMessage() async {
+    final text = _messageController.text.trim();
+    if (text.isEmpty) return;
+
+    _messageController.clear(); // Clear the box immediately for good UX
+
+    try {
+      final supabase = Supabase.instance.client;
+      // SENDING TO THE CLOUD
+      await supabase.from('comments').insert({
+        'space_id': widget.spaceId,
+        'item_id': widget.itemId,
+        'user_id': supabase.auth.currentUser!.id,
+        'content': text,
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // LISTENING TO THE WEBSOCKET
+    final commentsAsync = ref.watch(commentsStreamProvider(widget.itemId));
+
+    return Container(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(
+          context,
+        ).viewInsets.bottom, // Moves up when keyboard opens
+      ),
+      height:
+          MediaQuery.of(context).size.height *
+          0.6, // Takes up 60% of the screen
+      child: Column(
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Text(
+              'Live Discussion',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ),
+          const Divider(height: 1),
+
+          // THE CHAT MESSAGES
+          Expanded(
+            child: commentsAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (err, stack) => Center(child: Text('Error: $err')),
+              data: (comments) {
+                if (comments.isEmpty) {
+                  return const Center(child: Text('Be the first to comment!'));
+                }
+                return ListView.builder(
+                  itemCount: comments.length,
+                  itemBuilder: (context, index) {
+                    final comment = comments[index];
+                    // Simple chat bubble
+                    return ListTile(
+                      leading: const CircleAvatar(child: Icon(Icons.person)),
+                      title: Text(comment['content']),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+
+          // THE TEXT INPUT
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _messageController,
+                    decoration: const InputDecoration(
+                      hintText: 'Ask a question...',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 16),
+                    ),
+                    onSubmitted: (_) => _sendMessage(), // Send on enter key
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.send, color: Colors.deepPurple),
+                  onPressed: _sendMessage,
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

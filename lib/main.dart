@@ -50,11 +50,18 @@ class MyApp extends StatelessWidget {
           builder: (context, state) => const ProfileScreen(),
         ),
         GoRoute(
-          path: '/deck/:deckId',
+          path: '/deck/:deckId', // Yours might just be :id
           builder: (context, state) {
-            final deckId = state.pathParameters['deckId']!;
-            final deckTitle = state.extra as String? ?? 'Deck';
-            return DeckScreen(deckId: deckId, deckTitle: deckTitle);
+            final deckId = state
+                .pathParameters['deckId']!; // Or 'id' depending on your setup
+            final extraData =
+                state.extra as Map<String, dynamic>; // 👈 Unpack the Map!
+
+            return DeckScreen(
+              deckId: deckId,
+              deckTitle: extraData['title'],
+              spaceId: extraData['spaceId'],
+            );
           },
         ),
         GoRoute(
@@ -66,11 +73,18 @@ class MyApp extends StatelessWidget {
           },
         ),
         GoRoute(
-          path: '/study/:deckId',
+          path: '/study/:deckId', // Yours might just be :id
           builder: (context, state) {
-            final deckId = state.pathParameters['deckId']!;
-            final deckTitle = state.extra as String? ?? 'Study Mode';
-            return StudyScreen(deckId: deckId, deckTitle: deckTitle);
+            final deckId = state
+                .pathParameters['deckId']!; // Or 'id' depending on your setup
+            final extraData =
+                state.extra as Map<String, dynamic>; // 👈 Unpack the Map!
+
+            return StudyScreen(
+              deckId: deckId,
+              deckTitle: extraData['title'],
+              spaceId: extraData['spaceId'],
+            );
           },
         ),
       ],

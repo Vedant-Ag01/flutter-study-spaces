@@ -106,7 +106,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {
-                    context.push('/deck/${deck['id']}', extra: deck['title']);
+                    context.push(
+                      '/deck/${deck['id']}',
+                      extra: {
+                        'title': deck['title'],
+                        'spaceId': widget.spaceId,
+                      },
+                    );
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Opening deck soon...')),
                     );
