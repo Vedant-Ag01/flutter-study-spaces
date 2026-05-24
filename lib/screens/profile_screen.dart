@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
-import '../providers/spaces_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../providers/spaces_provider.dart'; // Ensure this path is correct!
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -14,74 +14,124 @@ class ProfileScreen extends ConsumerStatefulWidget {
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   bool _isUploading = false;
   String? _avatarUrl;
+  String _name = 'Loading...'; // Added state for the user's name
 
   @override
   void initState() {
     super.initState();
-    _loadExistingAvatar();
+    _loadProfileData(); // Upgraded to load both photo AND name
   }
 
-  // 1.Checking if they already have a photo when the screen opens
-  Future<void> _loadExistingAvatar() async {
+  // 1. Fetch Name and Photo from the database
+  Future<void> _loadProfileData() async {
     final supabase = ref.read(supabaseProvider);
     final user = supabase.auth.currentUser;
     if (user == null) return;
 
     try {
-      //loiking inside the storage to check if there really is an avatar photo or not
-      final files = await supabase.storage.from('avatars').list(path: user.id);
+      // Look at the public.profiles table
+      final data = await supabase
+          .from('profiles')
+          .select()
+          .eq('id', user.id)
+          .maybeSingle();
 
-      // If the list is empty, they haven't uploaded a photo yet.
-      if (files.isEmpty) {
+      if (mounted) {
         setState(() {
-          _avatarUrl =
-              null; // This tells the UI to show the default Icon(Icons.person)
+          _name = data?['name'] ?? 'Add your name';
+
+          // If they have an avatar URL in the database, append a timestamp to bust the cache
+          if (data?['avatar_url'] != null) {
+            _avatarUrl =
+                '${data!['avatar_url']}?t=${DateTime.now().millisecondsSinceEpoch}';
+          } else {
+            _avatarUrl = null;
+          }
         });
-        return;
       }
-
-      // If we passed the check above, the file exists, Now it is safe to generate the URL.
-      final url = supabase.storage
-          .from('avatars')
-          .getPublicUrl('${user.id}/profile.jpg');
-
-      //used something here called "Cache - Busting" tricking the phone into thinkingit is a new address
-      setState(() {
-        _avatarUrl = '$url?t=${DateTime.now().millisecondsSinceEpoch}';
-      });
     } catch (e) {
-      // If the folder doesn't exist yet, it might throw an error so hire we catch it and show the default icon.
-      setState(() {
-        _avatarUrl = null;
-      });
+      if (mounted) setState(() => _name = 'Error loading profile');
     }
   }
 
-  // 2.function to open the camera roll and upload!
+  // 2. The Edit Name Popup
+  Future<void> _showEditNameDialog() async {
+    final nameController = TextEditingController(
+      text: _name == 'Add your name' ? '' : _name,
+    );
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Name'),
+        content: TextField(
+          controller: nameController,
+          decoration: const InputDecoration(hintText: 'Your Display Name'),
+          textCapitalization: TextCapitalization.words,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final newName = nameController.text.trim();
+              if (newName.isEmpty) return;
+
+              final supabase = ref.read(supabaseProvider);
+              final user = supabase.auth.currentUser;
+
+              try {
+                // Save the new name to the profiles table
+                await supabase.from('profiles').upsert({
+                  'id': user!.id,
+                  'name': newName,
+                  // Keep the existing avatar URL if it exists
+                  if (_avatarUrl != null)
+                    'avatar_url': _avatarUrl!.split('?').first,
+                });
+
+                if (mounted) {
+                  setState(() => _name = newName);
+                  Navigator.pop(context);
+                }
+              } catch (e) {
+                if (mounted)
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('Error: $e')));
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 3. Upload Photo and update the database simultaneously
   Future<void> _uploadNewAvatar() async {
     final supabase = ref.read(supabaseProvider);
     final user = supabase.auth.currentUser;
     if (user == null) return;
 
-    // Open the phone's gallery
     final picker = ImagePicker();
     final imageFile = await picker.pickImage(
       source: ImageSource.gallery,
-      maxWidth: 600, // Compressing the image so it uploads instantly
+      maxWidth: 600,
       maxHeight: 600,
     );
 
-    if (imageFile == null) return; // User canceled the picker
+    if (imageFile == null) return;
 
     setState(() => _isUploading = true);
 
     try {
-      // Convert the image to raw bytes
       final bytes = await imageFile.readAsBytes();
       final path = '${user.id}/profile.jpg';
 
-      // Upload to the 'avatars' bucket in Supabase!
-      // upsert: true means it will overwrite their old photo if they change it.
+      // 1. Upload to storage bucket
       await supabase.storage
           .from('avatars')
           .uploadBinary(
@@ -90,36 +140,43 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             fileOptions: const FileOptions(upsert: true),
           );
 
+      // 2. Get the public URL
+      final publicUrl = supabase.storage.from('avatars').getPublicUrl(path);
+
+      //Save this URL to the profiles table so the Chat can see it;p;l
+      await supabase.from('profiles').upsert({
+        'id': user.id,
+        'name': _name == 'Add your name'
+            ? null
+            : _name, // Don't save the placeholder text
+        'avatar_url': publicUrl,
+      });
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Profile picture updated!')),
         );
-        _loadExistingAvatar(); // Refresh the picture on screen
+        _loadProfileData(); // Refresh the screen
       }
     } catch (error) {
-      if (mounted) {
+      if (mounted)
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Error uploading: $error')));
-      }
     } finally {
-      if (mounted) {
-        setState(() => _isUploading = false);
-      }
+      if (mounted) setState(() => _isUploading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final user = ref.read(supabaseProvider).auth.currentUser;
-
     return Scaffold(
       appBar: AppBar(title: const Text('My Profile')),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            //AVATAR CIRCLE
+            // AVATAR CIRCLE
             GestureDetector(
               onTap: _isUploading ? null : _uploadNewAvatar,
               child: Stack(
@@ -127,20 +184,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 children: [
                   CircleAvatar(
                     radius: 80,
-                    backgroundColor: Colors.grey.shade300,
+                    backgroundColor: Colors.deepPurple.shade50,
                     backgroundImage: _avatarUrl != null
                         ? NetworkImage(_avatarUrl!)
                         : null,
                     child: _avatarUrl == null
-                        ? const Icon(Icons.person, size: 80, color: Colors.grey)
+                        ? const Icon(
+                            Icons.person,
+                            size: 80,
+                            color: Colors.deepPurple,
+                          )
                         : null,
                   ),
-
-                  // Show a loading spinner right on top of the image while uploading
                   if (_isUploading)
                     const CircularProgressIndicator(color: Colors.deepPurple),
-
-                  // A little camera icon to tell them it's clickable
                   Positioned(
                     bottom: 0,
                     right: 0,
@@ -153,17 +210,32 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
+
+            // NAME DISPLAY & EDIT BUTTON
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  _name,
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.edit, color: Colors.grey),
+                  onPressed: _showEditNameDialog,
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 8),
 
             // USER'S EMAIL
             Text(
-              user?.email ?? 'Unknown User',
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Tap your photo to change it',
-              style: TextStyle(color: Colors.grey),
+              ref.read(supabaseProvider).auth.currentUser?.email ?? '',
+              style: const TextStyle(color: Colors.grey, fontSize: 16),
             ),
           ],
         ),

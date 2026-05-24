@@ -16,3 +16,22 @@ final commentsStreamProvider =
             ascending: true,
           ); // Oldest at the top, newest at the bottom
     });
+
+// The autoDispose modifier ensures the cache is shredded when the user leaves the screen, i used future provider here instead of
+//stream as it will put a heavy load on the server if 30 websockets are open for 30 members in a single space just for looking for instantaneous name changes
+final userProfileProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>?, String>((ref, userId) async {
+      final supabase = Supabase.instance.client;
+
+      try {
+        final data = await supabase
+            .from('profiles')
+            .select('name, avatar_url')
+            .eq('id', userId)
+            .maybeSingle();
+
+        return data;
+      } catch (e) {
+        return null;
+      }
+    });

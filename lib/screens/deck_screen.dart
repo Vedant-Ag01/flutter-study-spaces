@@ -25,7 +25,6 @@ class _DeckScreenState extends ConsumerState<DeckScreen> {
   Future<void> _showAddCardDialog() async {
     final frontController = TextEditingController();
     final backController = TextEditingController();
-
     await showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -83,6 +82,113 @@ class _DeckScreenState extends ConsumerState<DeckScreen> {
     );
   }
 
+  // The delete function
+  Future<void> _deleteCard(String cardId) async {
+    // Show a quick confirmation dialog first so users don't accidentally delete!
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Flashcard?'),
+        content: const Text('Are you sure? This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      final supabase = ref.read(supabaseProvider);
+      // SEND DELETE TO CLOUD
+      await supabase.from('flashcards').delete().eq('id', cardId);
+
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Card deleted!')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
+  // The Edit Function
+  Future<void> _showEditCardDialog(Map<String, dynamic> card) async {
+    // Pre-fill the text boxes with the existing card data
+    final frontController = TextEditingController(text: card['front']);
+    final backController = TextEditingController(text: card['back']);
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Flashcard'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: frontController,
+              decoration: const InputDecoration(labelText: 'Question'),
+              maxLines: 2,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: backController,
+              decoration: const InputDecoration(labelText: 'Answer'),
+              maxLines: 3,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final front = frontController.text.trim();
+              final back = backController.text.trim();
+              if (front.isEmpty || back.isEmpty) return;
+
+              try {
+                final supabase = ref.read(supabaseProvider);
+                // SEND UPDATE TO CLOUD
+                await supabase
+                    .from('flashcards')
+                    .update({'front': front, 'back': back})
+                    .eq('id', card['id']);
+
+                if (mounted) Navigator.pop(context);
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('Error: $e')));
+                }
+              }
+            },
+            child: const Text('Save Changes'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cardsAsync = ref.watch(flashcardsStreamProvider(widget.deckId));
@@ -91,7 +197,6 @@ class _DeckScreenState extends ConsumerState<DeckScreen> {
       appBar: AppBar(
         title: Text(widget.deckTitle),
         actions: [
-          // Wire this button up to the 3D Study Mode next
           IconButton(
             icon: const Icon(Icons.play_circle_fill, size: 28),
             tooltip: 'Study Deck',
@@ -123,20 +228,74 @@ class _DeckScreenState extends ConsumerState<DeckScreen> {
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  // We use a Stack so we can easily pin the menu button to the top right
+                  child: Stack(
                     children: [
-                      Text(
-                        'Q: ${card['front']}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(
+                              right: 32.0,
+                            ), // Make room for the button
+                            child: Text(
+                              'Q: ${card['front']}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                          const Divider(),
+                          Text(
+                            'A: ${card['back']}',
+                            style: TextStyle(color: Colors.grey.shade700),
+                          ),
+                        ],
                       ),
-                      const Divider(),
-                      Text(
-                        'A: ${card['back']}',
-                        style: TextStyle(color: Colors.grey.shade700),
+
+                      // The action  menu
+                      Positioned(
+                        top: -12,
+                        right: -12,
+                        child: PopupMenuButton<String>(
+                          onSelected: (value) {
+                            if (value == 'edit') {
+                              _showEditCardDialog(card);
+                            } else if (value == 'delete') {
+                              _deleteCard(card['id']);
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(
+                              value: 'edit',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.edit, size: 20),
+                                  SizedBox(width: 8),
+                                  Text('Edit'),
+                                ],
+                              ),
+                            ),
+                            const PopupMenuItem(
+                              value: 'delete',
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.delete,
+                                    color: Colors.red,
+                                    size: 20,
+                                  ),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Delete',
+                                    style: TextStyle(color: Colors.red),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),

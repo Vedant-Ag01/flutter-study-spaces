@@ -219,6 +219,61 @@ class _FlipCardState extends State<FlipCard>
   }
 }
 
+//with name comment tile , self defined widget
+class CommentTile extends ConsumerWidget {
+  final Map<String, dynamic> comment;
+
+  const CommentTile({super.key, required this.comment});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // We pass the user_id from the comment to our new provider
+    final profileAsync = ref.watch(userProfileProvider(comment['user_id']));
+
+    return profileAsync.when(
+      // 1. Loading State
+      loading: () => const ListTile(
+        leading: CircleAvatar(child: CircularProgressIndicator(strokeWidth: 2)),
+        title: Text('Loading...'),
+      ),
+
+      // 2. Error State
+      error: (err, stack) => ListTile(
+        leading: const CircleAvatar(child: Icon(Icons.error)),
+        title: const Text('Unknown User'),
+        subtitle: Text(comment['content']),
+      ),
+
+      // 3. Success State!
+      data: (profile) {
+        // Fallbacks just in case the database row is empty
+        final name = profile?['name'] ?? 'Anonymous Student';
+        final avatarUrl = profile != null && profile.containsKey('avatar_url')
+            ? profile['avatar_url']
+            : null;
+
+        return ListTile(
+          leading: CircleAvatar(
+            backgroundColor: Colors.deepPurple.shade100,
+            backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
+            child: avatarUrl == null
+                ? const Icon(Icons.person, color: Colors.deepPurple)
+                : null,
+          ),
+          title: Text(
+            name,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+          ),
+          subtitle: Text(
+            comment['content'],
+            style: const TextStyle(fontSize: 15, color: Colors.black87),
+          ),
+        );
+      },
+    );
+  }
+}
+
 //Chat UI
 class ChatBottomSheet extends ConsumerStatefulWidget {
   final String itemId;
@@ -299,11 +354,7 @@ class _ChatBottomSheetState extends ConsumerState<ChatBottomSheet> {
                   itemCount: comments.length,
                   itemBuilder: (context, index) {
                     final comment = comments[index];
-                    // Simple chat bubble
-                    return ListTile(
-                      leading: const CircleAvatar(child: Icon(Icons.person)),
-                      title: Text(comment['content']),
-                    );
+                    return CommentTile(comment: comment);
                   },
                 );
               },
