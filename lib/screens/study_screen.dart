@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/flashcards_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:study_spaces/providers/comments_provider.dart';
+import 'package:shimmer/shimmer.dart';
 
 class StudyScreen extends ConsumerStatefulWidget {
   final String deckId;
@@ -56,11 +57,74 @@ class _StudyScreenState extends ConsumerState<StudyScreen> {
         ],
       ),
       body: cardsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, stack) => Center(child: Text('Error: $err')),
+        loading: () => const CardLoadingSkeleton(),
+        error: (err, stackTrace) {
+          final errorText = err.toString();
+          final isOffline =
+              errorText.contains('SocketException') ||
+              errorText.contains('ClientException') ||
+              errorText.contains('Failed host lookup');
+
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  isOffline ? Icons.wifi_off : Icons.error_outline,
+                  size: 60,
+                  color: Colors.redAccent,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  isOffline ? 'Connection Lost' : 'Oops! Something broke.',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                  child: Text(
+                    isOffline
+                        ? 'Please check your internet and try again.'
+                        : errorText,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey.shade600),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
         data: (cards) {
           if (cards.isEmpty) {
-            return const Center(child: Text('No cards to study!'));
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.inbox,
+                    size: 80,
+                    color: Colors.deepPurple.shade200,
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'This deck is empty!',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Go back and add some flashcards to start studying.',
+                    style: TextStyle(fontSize: 16, color: Colors.grey),
+                  ),
+                ],
+              ),
+            );
           }
 
           return Column(
@@ -386,6 +450,29 @@ class _ChatBottomSheetState extends ConsumerState<ChatBottomSheet> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+//loading skeleton
+class CardLoadingSkeleton extends StatelessWidget {
+  const CardLoadingSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey.shade300,
+      highlightColor: Colors.grey.shade100,
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Container(
+          height: 400, // Matches roughly the size of flip card
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+          ),
+        ),
       ),
     );
   }

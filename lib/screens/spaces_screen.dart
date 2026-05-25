@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/spaces_provider.dart';
 import 'package:study_spaces/screens/notes_screen.dart';
+import 'package:shimmer/shimmer.dart';
 
 class SpacesScreen extends ConsumerStatefulWidget {
   const SpacesScreen({super.key});
@@ -242,17 +243,62 @@ class _SpacesScreenState extends ConsumerState<SpacesScreen> {
           .watch(spacesStreamProvider)
           .when(
             // 1. The Loading State
-            loading: () => const Center(child: CircularProgressIndicator()),
+            loading: () => const ListLoadingSkeleton(),
 
             // 2. The Error State
-            error: (error, stackTrace) =>
-                Center(child: Text('Error loading spaces: $error')),
-
+            error: (err, stack) {
+              final isOffline =
+                  err.toString().contains('SocketException') ||
+                  err.toString().contains('ClientException');
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      isOffline ? Icons.wifi_off : Icons.error_outline,
+                      size: 60,
+                      color: Colors.redAccent,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      isOffline ? 'Connection Lost' : 'Error loading cards',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
             // 3. The Data / Empty State
             data: (spaces) {
               if (spaces.isEmpty) {
-                return const Center(
-                  child: Text('No study spaces yet. Create one!'),
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.dashboard_customize,
+                        size: 80,
+                        color: Colors.deepPurple.shade200,
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'No study spaces yet.',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Tap the + button to create or join one!',
+                        style: TextStyle(fontSize: 16, color: Colors.grey),
+                      ),
+                    ],
+                  ),
                 );
               }
 
@@ -320,6 +366,33 @@ class _SpacesScreenState extends ConsumerState<SpacesScreen> {
       floatingActionButton: FloatingActionButton(
         onPressed: _showCreateSpaceDialog,
         child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
+
+class ListLoadingSkeleton extends StatelessWidget {
+  const ListLoadingSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey.shade300,
+      highlightColor: Colors.grey.shade100,
+      child: ListView.builder(
+        itemCount: 5, // Show 5 fake loading rows
+        itemBuilder: (context, index) => Card(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: ListTile(
+            title: Container(height: 16, width: 100, color: Colors.white),
+            subtitle: Container(
+              height: 12,
+              width: double.infinity,
+              color: Colors.white,
+            ),
+            trailing: const Icon(Icons.chevron_right, color: Colors.white),
+          ),
+        ),
       ),
     );
   }

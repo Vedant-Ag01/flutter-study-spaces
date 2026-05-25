@@ -212,11 +212,72 @@ class _DeckScreenState extends ConsumerState<DeckScreen> {
 
       body: cardsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, stack) => Center(child: Text('Error: $err')),
+        error: (err, stackTrace) {
+          final errorText = err.toString();
+          final isOffline =
+              errorText.contains('SocketException') ||
+              errorText.contains('ClientException') ||
+              errorText.contains('Failed host lookup');
+
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  isOffline ? Icons.wifi_off : Icons.error_outline,
+                  size: 60,
+                  color: Colors.redAccent,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  isOffline ? 'Connection Lost' : 'Oops! Something broke.',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                  child: Text(
+                    isOffline
+                        ? 'Please check your internet and try again.'
+                        : errorText,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey.shade600),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
         data: (cards) {
           if (cards.isEmpty) {
-            return const Center(
-              child: Text('No cards yet. Add your first one!'),
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.style,
+                    size: 80,
+                    color: Colors.deepPurple.shade200,
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'It’s quiet in here...',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Tap the + button to add your first flashcard!',
+                    style: TextStyle(fontSize: 16, color: Colors.grey),
+                  ),
+                ],
+              ),
             );
           }
 
