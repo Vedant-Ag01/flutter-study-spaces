@@ -26,9 +26,59 @@ class _StudyScreenState extends ConsumerState<StudyScreen> {
   final PageController _pageController = PageController();
   int _currentIndex = 0;
 
+  //SRS Algorithm
+  Future<void> _processReview(
+    Map<String, dynamic> card,
+    String difficulty,
+  ) async {
+    int currentBox = card['box_level'] ?? 1;
+    int newBox;
+    DateTime nextReview;
+
+    final now = DateTime.now();
+
+    if (difficulty == 'hard') {
+      // Reset to Box 1, see it again immediately
+      newBox = 1;
+      nextReview = now;
+    } else if (difficulty == 'good') {
+      // Kept pace. Stay in the same box, see it tomorrow.
+      newBox = currentBox;
+      nextReview = now.add(const Duration(days: 1));
+    } else {
+      // 'easy' - Promoted! 2^box_level days in the future
+      newBox = currentBox + 1;
+      int daysToWait = pow(2, currentBox).toInt();
+      nextReview = now.add(Duration(days: daysToWait));
+    }
+
+    try {
+      await Supabase.instance.client
+          .from('flashcards')
+          .update({
+            'box_level': newBox,
+            'next_review_date': nextReview.toIso8601String(),
+          })
+          .eq('id', card['id']);
+      // Move to the next card so the user can keep studying
+      if (_pageController.hasClients) {
+        _pageController.nextPage(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error saving progress: $e')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    // We grab the exact same provider we used on the DeckScreen!
+    // We grab the exact same provider we used on the DeckScreen
     final cardsAsync = ref.watch(flashcardsStreamProvider(widget.deckId));
 
     return Scaffold(
@@ -97,8 +147,9 @@ class _StudyScreenState extends ConsumerState<StudyScreen> {
             ),
           );
         },
-        data: (cards) {
-          if (cards.isEmpty) {
+        data: (allCards) {
+          // SCENARIO 1: The deck is completely empty. No cards created yet.
+          if (allCards.isEmpty) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -127,13 +178,52 @@ class _StudyScreenState extends ConsumerState<StudyScreen> {
             );
           }
 
+          // FILTER: Now we filter out the future cards in the UI!
+          final now = DateTime.now();
+          final dueCards = allCards.where((card) {
+            if (card['next_review_date'] == null) return true;
+            final reviewDate = DateTime.parse(card['next_review_date']);
+            return reviewDate.isBefore(now) || reviewDate.isAtSameMomentAs(now);
+          }).toList();
+
+          // SCENARIO 2: Deck has cards, but the user finished studying them today.
+          if (dueCards.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.check_circle_outline,
+                    size: 80,
+                    color: Colors.green.shade300,
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'You\'re all caught up!',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Come back tomorrow to review more cards.',
+                    style: TextStyle(fontSize: 16, color: Colors.grey),
+                  ),
+                ],
+              ),
+            );
+          }
+
           return Column(
             children: [
               // Progress Tracker
               Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Text(
-                  'Card ${_currentIndex + 1} of ${cards.length}',
+                  // IMPORTANT: Changed 'cards.length' to 'dueCards.length'
+                  'Card ${_currentIndex + 1} of ${dueCards.length}',
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -150,15 +240,63 @@ class _StudyScreenState extends ConsumerState<StudyScreen> {
                   onPageChanged: (index) {
                     setState(() => _currentIndex = index);
                   },
-                  itemCount: cards.length,
+                  // IMPORTANT: Changed 'cards.length' to 'dueCards.length'
+                  itemCount: dueCards.length,
                   itemBuilder: (context, index) {
-                    final card = cards[index];
-                    return Padding(
-                      padding: const EdgeInsets.all(32.0),
-                      child: FlipCard(
-                        frontText: card['front'],
-                        backText: card['back'],
-                      ),
+                    // IMPORTANT: Changed 'cards[index]' to 'dueCards[index]'
+                    final card = dueCards[index];
+
+                    return Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.all(32.0),
+                            child: FlipCard(
+                              frontText: card['front'],
+                              backText: card['back'],
+                            ),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 32.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.red.shade100,
+                                ),
+                                onPressed: () => _processReview(card, 'hard'),
+                                child: const Text(
+                                  'Hard',
+                                  style: TextStyle(color: Colors.red),
+                                ),
+                              ),
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.orange.shade100,
+                                ),
+                                onPressed: () => _processReview(card, 'good'),
+                                child: const Text(
+                                  'Good',
+                                  style: TextStyle(color: Colors.orange),
+                                ),
+                              ),
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green.shade100,
+                                ),
+                                onPressed: () => _processReview(card, 'easy'),
+                                child: const Text(
+                                  'Easy',
+                                  style: TextStyle(color: Colors.green),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     );
                   },
                 ),

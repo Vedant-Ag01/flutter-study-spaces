@@ -11,8 +11,5 @@ final flashcardsStreamProvider =
           .from('flashcards')
           .stream(primaryKey: ['id'])
           .eq('deck_id', deckId)
-          .order(
-            'created_at',
-            ascending: true,
-          ); // Ascending so the oldest cards show first
+          .order('created_at'); // Ascending so the oldest cards show first
     });
