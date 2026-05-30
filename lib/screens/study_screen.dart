@@ -209,7 +209,7 @@ class _StudyScreenState extends ConsumerState<StudyScreen> {
                   const SizedBox(height: 8),
                   const Text(
                     'Come back tomorrow to review more cards.',
-                    style: TextStyle(fontSizSRe: 16, color: Colors.grey),
+                    style: TextStyle(fontSize: 16, color: Colors.grey),
                   ),
                 ],
               ),

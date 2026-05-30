@@ -4,17 +4,21 @@ import '../providers/decks_provider.dart';
 import '../providers/spaces_provider.dart'; // To grab the master Supabase connection
 import 'package:go_router/go_router.dart';
 
-class ChatScreen extends ConsumerStatefulWidget {
+class SpaceDetailsScreen extends ConsumerStatefulWidget {
   final String spaceId;
   final String spaceName;
 
-  const ChatScreen({super.key, required this.spaceId, required this.spaceName});
+  const SpaceDetailsScreen({
+    super.key,
+    required this.spaceId,
+    required this.spaceName,
+  });
 
   @override
-  ConsumerState<ChatScreen> createState() => _ChatScreenState();
+  ConsumerState<SpaceDetailsScreen> createState() => _SpaceDetailsScreenState();
 }
 
-class _ChatScreenState extends ConsumerState<ChatScreen> {
+class _SpaceDetailsScreenState extends ConsumerState<SpaceDetailsScreen> {
   // The popup to create a new flashcard folder/deck
   Future<void> _showCreateDeckDialog() async {
     final titleController = TextEditingController();

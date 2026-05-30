@@ -4,7 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:study_spaces/screens/login_screen.dart';
 import 'package:study_spaces/screens/spaces_screen.dart';
-import 'package:study_spaces/screens/chat_screen.dart';
+import 'package:study_spaces/screens/spaceDetails_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'screens/profile_screen.dart';
 import 'package:study_spaces/screens/deck_screen.dart';
@@ -69,7 +69,7 @@ class MyApp extends StatelessWidget {
           builder: (context, state) {
             final spaceId = state.pathParameters['id']!;
             final spaceName = state.extra as String? ?? 'Study Space';
-            return ChatScreen(spaceId: spaceId, spaceName: spaceName);
+            return SpaceDetailsScreen(spaceId: spaceId, spaceName: spaceName);
           },
         ),
         GoRoute(
