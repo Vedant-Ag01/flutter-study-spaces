@@ -55,52 +55,39 @@ class _SpacesScreenState extends ConsumerState<SpacesScreen> {
                 if (code.isEmpty) return;
 
                 try {
-                  // 1. Ask the database: "Does a room with this code exist?"
-                  final space = await supabase
-                      .from('spaces')
-                      .select()
-                      .eq('invite_code', code)
-                      .maybeSingle(); // maybeSingle returns null if it doesn't exist!
+                  // Call the VIP Bouncer function in the database
+                  final success = await supabase.rpc(
+                    'join_study_space',
+                    params: {'code_input': code},
+                  );
 
-                  // 2. If it doesn't exist, show an error and stop.
-                  if (space == null) {
+                  if (success == true) {
+                    // Force Riverpod to refresh the list
+                    ref.invalidate(spacesStreamProvider);
+
+                    if (mounted) {
+                      Navigator.pop(context); // Close the popup
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Successfully joined! The space will appear in your list.',
+                          ),
+                        ),
+                      );
+                    }
+                  } else {
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Invalid invite code!')),
                       );
                     }
-                    return;
-                  }
-
-                  // 3. If it exists write the user's name on the ledger
-                  await supabase.from('space_members').insert({
-                    'space_id': space['id'],
-                    'user_id': supabase.auth.currentUser!.id,
-                  });
-
-                  // 4. Close the popup and celebrate
-                  if (mounted) {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Successfully joined ${space['name']}!'),
-                      ),
-                    );
-                    context.push(
-                      '/chat/${space['id']}',
-                      extra: space['name'] ?? 'Study Space',
-                    );
                   }
                 } catch (e) {
                   // This catches errors (like if they are already in the room)
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Error: Could not join (Are you already a member?)',
-                        ),
-                      ),
-                    );
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text('Error: $e')));
                   }
                 }
               },
@@ -116,7 +103,7 @@ class _SpacesScreenState extends ConsumerState<SpacesScreen> {
   Future<void> _showCreateSpaceDialog() async {
     final nameController = TextEditingController();
     final descController = TextEditingController();
-    String visibility = 'private'; // Default to private!
+    String visibility = 'private'; // Default to private
 
     await showDialog(
       context: context,
@@ -181,6 +168,9 @@ class _SpacesScreenState extends ConsumerState<SpacesScreen> {
                     'user_id': supabase.auth.currentUser!.id,
                   });
 
+                  // Force Riverpod to refresh the list
+                  ref.invalidate(spacesStreamProvider);
+
                   if (mounted) {
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -219,7 +209,7 @@ class _SpacesScreenState extends ConsumerState<SpacesScreen> {
             icon: const Icon(Icons.account_circle),
             tooltip: 'My Profile',
             onPressed: () {
-              context.push('/profile'); // This triggers the route we just made!
+              context.push('/profile'); // This triggers the route we just made
             },
           ),
           IconButton(

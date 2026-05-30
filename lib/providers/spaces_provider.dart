@@ -9,5 +9,5 @@ final spacesStreamProvider = StreamProvider<List<Map<String, dynamic>>>((ref) {
   return supabase
       .from('spaces')
       .stream(primaryKey: ['id'])
-      .order('created_at', ascending: true);
+      .order('created_at', ascending: false);
 });
