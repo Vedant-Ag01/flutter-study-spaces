@@ -35,6 +35,15 @@ A collaborative study application where students can join shared Study Spaces to
 * **Spaced Repetition System (SRS):** Built a custom Spaced Repetition algorithm based on the Leitner System.
 * **Dynamic Scheduling:** Utilizes Postgres timestamps (`next_review_date`) and client-side Dart filtering to schedule cards for optimal retention.
 ---
+---
+
+## How to Run Locally
+1. Clone this repository.
+2. Run `flutter pub get` to install all dependencies (including `riverpod`, `shimmer`, `flutter_quill`).
+3. Add your Supabase `URL` and `Anon Key` to your environment configuration.
+4. Run `flutter run`.
+
+---
 ## AI Usage Disclosure
 I built the core architecture, UI, and logic independently
 
